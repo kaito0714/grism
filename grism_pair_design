@@ -1,0 +1,506 @@
+#------------------------------ fiber GDD ------------------------------
+import math
+
+class Fiber_GDD():
+    '''
+    任意長さのあるファイバーの任意波長における群遅延分散の計算
+    D:光通信分野での群遅延速度分散パラメータ[ps/nm/km]
+    λ:波長[nm]
+    l:ファイバー長[m]
+    '''
+    
+    # コンストラクタ：インスタンス化されたときに最初に呼ばれるメソッド．データの初期化の処理．
+    def __init__(self, D, λ, l):
+        self.c = 2.99792458*10**8   # m/s
+        self.pi = math.pi           # rad
+        self.D = D * 10**-6         # s/m/m
+        self.λ = λ * 10**-9         # m
+        self.l = l                  # m
+    
+    # 群遅延速度分散パラメータDから群遅延速度分散を求める計算
+    def GVD(self):
+        GVD = -(self.λ**2 * self.D) / (2 * self.pi * self.c)        #s^2/m
+        self.gvd = GVD * 10**30 * 10**-3                            # fs^2/mm
+        return self.gvd
+
+    # 群遅延分散の計算
+    def GDD(self):
+        GVD = -(self.λ**2 * self.D) / (2 * self.pi * self.c)   # s^2/m
+        GVD = GVD * 10**24 * 10**-3                            # ps^2/mm
+        GDD = GVD * self.l * 10**3                             # ps^2
+        return GDD
+
+    def GDD2(self):
+        GDD = self.gvd * self.l * 10**3 * 10**-6
+        return GDD
+        
+        
+
+
+
+#------------------------------ approximate curve ------------------------------
+
+import pandas as pd
+import numpy as np
+import sympy as sym
+from sympy.plotting import plot
+import sklearn.metrics as metrics
+
+df = pd.read_excel('excel file name', 'sheet name')
+
+x_observed = np.array(df['nm'])
+y_SM2000D = np.array(df['SM2000D,fs^2/mm'])
+print(x_observed,y_SM2000D)
+
+cf1 = ["最小2乗法（1次式）", lambda x, y: np.polyfit(x, y, 1)]
+cf2 = ["最小2乗法（2次式）", lambda x, y: np.polyfit(x, y, 2)]
+cf3 = ["最小2乗法（3次式）", lambda x, y: np.polyfit(x, y, 3)]
+cf4 = ["最小2乗法（4次式）", lambda x, y: np.polyfit(x, y, 4)]
+cf5 = ["最小2乗法（5次式）", lambda x, y: np.polyfit(x, y, 5)]
+cf6 = ["最小2乗法（6次式）", lambda x, y: np.polyfit(x, y, 6)]
+cf7 = ["最小2乗法（7次式）", lambda x, y: np.polyfit(x, y, 7)]
+cf8 = ["最小2乗法（8次式）", lambda x, y: np.polyfit(x, y, 8)]
+cf9 = ["最小2乗法（9次式）", lambda x, y: np.polyfit(x, y, 9)]
+
+def func(X, *params):
+    Y = np.zeros_like(X)
+    for i, param in enumerate(params):
+        Y = Y + np.array(param * X ** i)
+    return Y
+
+sym.init_printing(use_unicode=True)
+
+x, y = sym.symbols("x y")
+GVD_SM2000D = 0
+count_SM2000D = -1
+method_applied_SM2000D = 0
+for method_name, method in [cf1, cf2, cf3, cf4, cf5, cf6, cf7, cf8, cf9]:
+    print(method_name, end=':')
+    # 係数の計算
+    coefficients = method(x_observed, y_SM2000D)
+    coefficients_1 = coefficients[::-1]
+    #print(coefficients_1)
+
+    r = metrics.r2_score(y_SM2000D, func(x_observed, *coefficients_1))
+    print(r)
+
+    # Sympy を用いた数式の表示
+    expr_SM2000D = 0
+    for index, coefficient in enumerate(coefficients):
+        expr_SM2000D += coefficient * x ** (len(coefficients) - index - 1)
+    #display(sym.Eq(y, expr_SM2000D))
+    
+    if count_SM2000D <= r:
+        count_SM2000D = r
+        GVD_SM2000D = expr_SM2000D
+        method_applied_SM2000D = method_name
+
+print('method >>>',method_applied_SM2000D)
+print('r >>', count_SM2000D)
+print('function >>>',GVD_SM2000D)
+display(sym.Eq(y, GVD_SM2000D))
+
+
+
+
+
+#------------------------------ unit conversion ------------------------------
+SM2000D_lis = []
+
+for i in range(1600, 2001):
+    GVD_value = GVD_SM2000D.subs(x,i)    # ps^2 → fs^2
+    SM2000D_lis.append(GVD_value)
+
+GVD_SM2000D = np.array(SM2000D_lis)
+
+
+
+
+
+#------------------------------ grism pair design ------------------------------
+import sympy as sym
+
+class Grism():
+    '''
+    ある波長（λ）におけるグリズム対の群遅延分散計算
+    x:ある波長（λ）の角周波数[rad/s]
+    n:ある波長（λ）の屈折率
+    N:ある波長（λ）の群屈折率
+    a:プリズム頂角[°]
+    L:プリズム間距離[mm]
+    H:プリズムの頂角間距離[mm]
+    G:回折格子とプリズムの間隔[mm]
+    '''
+    sym.var('x n N a L H G')
+    def __init__(self, sigma, theta_i):
+        self.c = 2.99792458*10**8   # 光速[m/s]
+        self.sigma = sigma          # 回折格子の格子密度[/mm]
+        self.theta_i = theta_i      # 回折格子への入射角[°]
+        self.pi = float(sym.pi)
+        self.x = x
+        self.n = n
+        self.N = N
+        self.a = a
+        self.L = L
+        self.H = H
+        self.G = G
+        
+        
+    def theta_d(self):
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_theta_d = sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)
+        theta_d = sym.asin(sin_theta_d)
+        return theta_d # rad
+    
+    def r1(self):
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)
+        return r1 # rad
+        
+    def d(self):
+        d = self.L *sym.cos(self.a * self.pi /180) - self.H * sym.sin(self.a * self.pi / 180)
+        return d # mm
+    
+    def r2(self):
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)        
+        r2 = r1 - self.a * self.pi / 180
+        return r2 #rad
+    
+    def i2(self):
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)        
+        r2 = r1 - self.a * self.pi / 180
+        sin_i2 = self.n * sym.sin(r2)
+        i2 = sym.asin(sin_i2)
+        return i2 # rad
+    
+    def optical_path(self):
+        d = self.L *sym.cos(self.a * self.pi /180) - self.H * sym.sin(self.a * self.pi / 180)
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_theta_d = sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)
+        theta_d = sym.asin(sin_theta_d)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)        
+        r2 = r1 - self.a * self.pi / 180
+        sin_i2 = self.n * sym.sin(r2)
+        i2 = sym.asin(sin_i2)
+        
+        term1 = d / sym.cos(i2)
+        
+        term2_1 = self.L / sym.cos(r1)
+        term2_2 = self.N - sin_theta_i * sym.cos(r2) / sym.sin(self.a * self.pi / 180)
+        term2_3 = 1 - d * sym.cos(self.a * self.pi / 180 + i2) / (self.L * sym.cos(i2))
+        term2 = term2_1 + term2_2 + term2_3
+        
+        term3_1 = 1 - sym.cos(self.theta_i * self.pi / 180 - theta_d)
+        term3 = self.G * term3_1 / sym.cos(theta_d)
+        
+        optical_path = term1 + term2 + term3
+        return optical_path # mm
+    
+    def GD(self, _x, _n, _N, _a, _L, _H, _G):
+        d = self.L *sym.cos(self.a * self.pi /180) - self.H * sym.sin(self.a * self.pi / 180)
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_theta_d = sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)
+        theta_d = sym.asin(sin_theta_d)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)        
+        r2 = r1 - self.a * self.pi / 180
+        sin_i2 = self.n * sym.sin(r2)
+        i2 = sym.asin(sin_i2)
+        
+        term1 = d / sym.cos(i2)
+        term1_value = term1.subs(x,_x).subs(n,_n).subs(a,_a).subs(L,_L).subs(H,_H)
+        
+        term2_1 = self.L / sym.cos(r1)
+        term2_2 = self.N - sin_theta_i * sym.cos(r2) / sym.sin(self.a * self.pi / 180)
+        term2_3 = 1 - d * sym.cos(self.a * self.pi / 180 + i2) / (self.L * sym.cos(i2))
+        term2 = term2_1 * term2_2 * term2_3
+        term2_value = term2_2.subs(x,_x).subs(n,_n).subs(N,_N).subs(a,_a).subs(L,_L).subs(H,_H)
+        
+        term3_1 = 1 - sym.cos(self.theta_i * self.pi / 180 - theta_d)
+        term3 = self.G * term3_1 / sym.cos(theta_d)
+        term3_value = term3.subs(x,_x).subs(n,_n).subs(G,_G)
+        
+        optical_path = term1 + term2 + term3
+        GD = 2 * (optical_path * 10**-3 / self.c) * 10**12
+        GD_value = GD.subs(x, _x).subs(n, _n).subs(N, _N).subs(a, _a).subs(G, _G).subs(H, _H).subs(L, _L)
+        
+        return GD_value # ps
+    
+    def GDD(self, _x, _n, _N, _a, _L, _H, _G):
+        d = self.L *sym.cos(self.a * self.pi /180) - self.H * sym.sin(self.a * self.pi / 180)
+        sin_theta_i = sym.sin(self.theta_i*self.pi/180)
+        sin_theta_d = sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)
+        theta_d = sym.asin(sin_theta_d)
+        sin_r1 = (sin_theta_i + (self.sigma * self.c*10**3) * 2 * self.pi / (self.x*10**12)) / self.n
+        r1 = sym.asin(sin_r1)        
+        r2 = r1 - self.a * self.pi / 180
+        sin_i2 = self.n * sym.sin(r2)
+        i2 = sym.asin(sin_i2)
+        
+        term1 = d / sym.cos(i2)
+        
+        term2_1 = self.L / sym.cos(r1)
+        term2_2 = self.N - sin_theta_i * sym.cos(r2) / sym.sin(self.a * self.pi / 180)
+        term2_3 = 1 - d * sym.cos(self.a * self.pi / 180 + i2) / (self.L * sym.cos(i2))
+        term2 = term2_1 * term2_2 * term2_3
+        
+        term3_1 = 1 - sym.cos(self.theta_i * self.pi / 180 - theta_d)
+        term3 = self.G * term3_1 / sym.cos(theta_d)
+        
+        optical_path = term1 + term2 + term3
+        GD = 2 * (optical_path * 10**-3 / self.c*10**12)
+        GDD_func = sym.diff(GD, self.x)
+        GDD_value = GDD_func.subs(x, _x).subs(n, _n).subs(N, _N).subs(a, _a).subs(L, _L).subs(H, _H).subs(G, _G)
+        return GDD_value # ps^2
+    
+data = Grism(560, -34)
+
+
+
+
+#------------------------------ setup ------------------------------
+import pandas as pd
+df = pd.read_excel('excel file name', 'sheet name')
+wavelength = np.array(df['wl,nm'])
+omega = np.array(df['angular frequency,rad/s'])*10**-12
+n_value = np.array(df['n'])
+N_value = np.array(df['N'])
+start_wavelength = 1600
+
+i1, i2, i3, i4, i5 = 1600-start_wavelength, 1789-start_wavelength, 1900-start_wavelength, 1850-start_wavelength, 1950-start_wavelength
+data_1 = [wavelength[i1], omega[i1], n_value[i1], N_value[i1]]
+data_2 = [wavelength[i2], omega[i2], n_value[i2], N_value[i2]]
+data_3 = [wavelength[i3], omega[i3], n_value[i3], N_value[i3]]
+data_4 = [wavelength[i4], omega[i4], n_value[i4], N_value[i4]]
+data_5 = [wavelength[i5], omega[i5], n_value[i5], N_value[i5]]
+
+
+
+
+#------------------------------ simulation ------------------------------
+# stretcher
+fiber_length = 25*10**-3
+start_wavelength = 1600
+SM2000D_GDD = GVD_SM2000D * fiber_length
+
+stretcher_data1 = SM2000D_GDD[1600-start_wavelength]
+stretcher_data2 = SM2000D_GDD[1789-start_wavelength]
+stretcher_data3 = SM2000D_GDD[1900-start_wavelength]
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(facecolor='w')
+ax.plot(wavelength, SM2000D_GDD)
+plt.hlines(0, 1600, 2000, color='black', linewidths=.5)
+ax.set_xlabel('wavelength[nm]')
+ax.set_ylabel('GDD[ps^2]')
+fig.subplots_adjust(bottom=0.15)
+plt.show()
+fig.savefig('save file name')
+
+# make the range for simulation
+import numpy as np
+L_range = np.arange(10,501)
+H_range = np.arange(1, 51)
+G_range = np.arange(0,101)
+xx, yy, zz = np.meshgrid(L_range, H_range, G_range)
+conbinations = np.c_[xx.flatten(), yy.flatten(), zz.flatten()]
+L_lis = conbinations[:, 0]
+H_lis = conbinations[:, 1]
+G_lis = conbinations[:, 2]
+
+# simulation
+min_GDD = 1
+for i in range(len(GDD_1)):
+    if abs(GDD_2[i]) <= min_GDD and GDD_1[i] < 0 and GDD_3[i] < 0 and -GDD_1[i] <= 0.1 and -GDD_3[i] <= 0.1:
+        
+        min_GDD = abs(GDD_2[i])
+        print('パラメータ:', conbinations[i])
+        print('GDD@1789nm:',GDD_2[i])
+        print('GDD@1600nm:', GDD_1[i])
+        print('GDD@1950nm:', GDD_3[i])
+        print('-'*30)
+        
+        
+ 
+ 
+ 
+#------------------------------ simulation result ------------------------------
+# GDD vs wavelength
+import pandas as pd
+import numpy as np
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import math
+
+light_speed = 2.99792458*10**8   # m/s
+pi = math.pi
+
+df = pd.read_excel('excel file name', 'sheet name')
+omega_GDD = np.array(df['angular frequency,rad/s'])
+omega_a = omega_GDD*10**-12
+n_value = np.array(df['n'])
+N_value = np.array(df['N'])
+
+wave_length = 2*pi*light_speed/omega_a*10**-3
+
+#constant_data = np.array([omega_a, n_value, N_value]).T
+#print(constant_data)
+
+data = Grism(560, -34)
+
+# [85, 16, 92]
+grism_para = [99, 1, 86]
+
+args = (x,n,N)
+func = sym.lambdify(args, data.GDD(x, n, N, 41, grism_para[0], grism_para[1], grism_para[2]), "numpy")
+GDD = func(omega_a, n_value, N_value)
+
+sum_GDD = (GDD + SM2000D_GDD)*10**-24
+
+fig, ax = plt.subplots(facecolor='w')
+ax.plot(wave_length, sum_GDD)
+plt.hlines(0, 1600, 2000, color='black', linewidths=.5)
+ax.set_xlabel('wavelength[nm]')
+ax.set_ylabel('GDD[s^2]')
+fig.subplots_adjust(bottom=0.15)
+plt.show()
+fig.savefig('save file name')
+
+
+# phase
+import numpy as np
+data_x = np.array(omega_GDD, dtype=float)
+data_y = np.array(sum_GDD, dtype=float)
+
+cf1 = ["最小2乗法（1次式）", lambda x, y: np.polyfit(x, y, 1)]
+cf2 = ["最小2乗法（2次式）", lambda x, y: np.polyfit(x, y, 2)]
+cf3 = ["最小2乗法（3次式）", lambda x, y: np.polyfit(x, y, 3)]
+cf4 = ["最小2乗法（4次式）", lambda x, y: np.polyfit(x, y, 4)]
+cf5 = ["最小2乗法（5次式）", lambda x, y: np.polyfit(x, y, 5)]
+cf6 = ["最小2乗法（6次式）", lambda x, y: np.polyfit(x, y, 6)]
+cf7 = ["最小2乗法（7次式）", lambda x, y: np.polyfit(x, y, 7)]
+cf8 = ["最小2乗法（8次式）", lambda x, y: np.polyfit(x, y, 8)]
+cf9 = ["最小2乗法（9次式）", lambda x, y: np.polyfit(x, y, 9)]
+
+def func(X, *params):
+    Y = np.zeros_like(X)
+    for i, param in enumerate(params):
+        Y = Y + np.array(param * X ** i)
+    return Y
+
+sym.init_printing(use_unicode=True)
+
+x, y = sym.symbols("x y")
+function = 0
+count = -1
+method_applied = 0
+
+for method_name, method in [cf1, cf2, cf3, cf4, cf5, cf6, cf7, cf8, cf9]:
+    print(method_name, end=':')
+    # 係数の計算
+    coefficients = method(data_x, data_y)
+    coefficients_1 = coefficients[::-1]
+    #print(coefficients_1)
+
+    r = metrics.r2_score(data_y, func(data_x, *coefficients_1))
+    print(r)
+
+    # Sympy を用いた数式の表示
+    expr = 0
+    for index, coefficient in enumerate(coefficients):
+        expr += coefficient * x ** (len(coefficients) - index - 1)
+    #display(sym.Eq(y, expr))
+    if count <= r:
+        count = r
+        function = expr
+        method_applied = method_name
+        
+print('method >>>',method_applied)
+print('r >>', count)
+print('function >>>',function)
+display(sym.Eq(y, function))
+
+func_y_lim = []
+
+for i in data_x:
+    value = function.subs(x, i)
+    func_y_lim.append(value)
+func_y = np.array(func_y_lim, dtype=float)
+
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots()
+ax.plot(data_x, data_y, label='data')
+ax.plot(data_x, func_y, label='func', ms=0.01)
+ax.legend()
+plt.show()
+
+# pulse shape
+import matplotlib.pyplot as plt
+import numpy as np
+
+c = 299792458 #光速[m/s]
+
+def nsqrt(dat): #平方根の定義 
+	return np.sign(dat) * np.sqrt(np.abs(dat))
+
+N = 2**12
+dnu = 0.5e11 
+l1 = 1789e-9 #中心波長[m]
+nu1 = c/l1 #中心周波数[1/s]
+offset = 2.3
+
+ind1 = np.arange((-N/2),(N/2))
+nu1_arr = nu1 + ind1 * dnu #プロットする周波数
+omega = 2*np.pi*nu1_arr #角周波数
+Omegaf = omega/10**15 #角周波数/10^15 計算のため
+Omega0 = 2*np.pi*c/l1 #中心角周波数
+Dt = 100.0E-15/np.sqrt(2.0*np.log(2.0)) # Δtのこと
+E = np.exp(-Dt**2*(omega-Omega0)**2/4.0) # E(ω)のこと
+
+dat1 = np.loadtxt("data file") #スペクトルの実験データ
+
+wl1_arr =  dat1[:,0]*1e-9#dat1の0列目（波長）
+e1_spec_wl = dat1[:,1]-offset#dat1の1列目（スペクトル）
+
+e1_spec_dat = np.interp(nu1_arr, c/wl1_arr[::-1], e1_spec_wl[::-1]*wl1_arr[::-1]**2/l1**2,0,0)#与えられた離散的なデータポイント (xp, fp) を x で評価した関数に対する 1 次元の区分的線形補間関数を返します。
+#↑(周波数,SPECTRUM)
+
+dt = 1./(N*dnu)
+t_arr = ind1 * dt
+fig = plt.figure(facecolor='w')
+phase =  c_lst[0]*omega**10 + c_lst[1]*omega**9 + c_lst[2]*omega**8 + c_lst[3]*omega**7 + c_lst[4]*omega**6 + c_lst[5]*omega**5 + c_lst[6]*omega**4 + c_lst[7]*omega**3 + c_lst[8]*omega**2 + c_lst[9]*omega + c_lst[10]  
+plt.xlim(942949270712294,1178097245096170)
+plt.ylim(-10,10)
+plt.xlabel("ω[rad/s]")
+plt.ylabel("φ[rad]")
+plt.plot(omega,phase)
+plt.show()
+fig.savefig('save file name')
+
+cos_phase = np.cos(phase.astype(np.float64))
+sin_phase = np.sin(phase.astype(np.float64))
+e = cos_phase-1j*sin_phase
+field = np.fft.fftshift(np.fft.ifft(np.fft.fftshift(nsqrt(e1_spec_dat))))#フーリエ逆変換で、時間関数に
+field_e = np.fft.fftshift(np.fft.ifft(np.fft.fftshift(nsqrt(e1_spec_dat)*e)))#フーリエ逆変換で、時間関数に
+
+fig = plt.figure(facecolor='w')
+plt.plot(t_arr,np.abs(field)**2, label='A')#時間と強度
+plt.plot(t_arr,np.abs(field_e)**2, label='B')#時間と強度
+plt.legend()
+plt.xlabel("t[s]")
+plt.ylabel("I(t)")
+plt.xlim(-1.00E-12,1.00E-12)
+plt.show()
+fig.savefig('save file name')
+
+
+
+
