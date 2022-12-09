@@ -1,4 +1,16 @@
-#------------------------------ fiber GDD ------------------------------
+#------------------------------ convert wavelength to angular frequency ------------------------------
+import math
+
+light_speed = 2.99792458*10**8   # m/s
+pi = math.pi
+
+def conversion():
+    wavelength = int(input('wavelength[nm]:'))
+    angular_frequency = 2 * pi * light_speed / wavelength * 10**9
+    return 'angular frequency[/s]:', angular_frequency
+conversion()
+
+#------------------------------ calculate fiber GDD ------------------------------
 import math
 
 class Fiber_GDD():
@@ -34,10 +46,6 @@ class Fiber_GDD():
         GDD = self.gvd * self.l * 10**3 * 10**-6
         return GDD
         
-        
-
-
-
 #------------------------------ approximate curve ------------------------------
 
 import pandas as pd
@@ -46,10 +54,10 @@ import sympy as sym
 from sympy.plotting import plot
 import sklearn.metrics as metrics
 
-df = pd.read_excel('excel file name', 'sheet name')
+df = pd.read_excel('excel file name', 'sheet name') # selection of file and sheet with fiber optical properties 
 
-x_observed = np.array(df['nm'])
-y_SM2000D = np.array(df['SM2000D,fs^2/mm'])
+x_observed = np.array(df['nm']) # wavelength
+y_SM2000D = np.array(df['SM2000D,fs^2/mm']) # GDD
 print(x_observed,y_SM2000D)
 
 cf1 = ["最小2乗法（1次式）", lambda x, y: np.polyfit(x, y, 1)]
@@ -100,10 +108,6 @@ print('r >>', count_SM2000D)
 print('function >>>',GVD_SM2000D)
 display(sym.Eq(y, GVD_SM2000D))
 
-
-
-
-
 #------------------------------ unit conversion ------------------------------
 SM2000D_lis = []
 
@@ -112,10 +116,6 @@ for i in range(1600, 2001):
     SM2000D_lis.append(GVD_value)
 
 GVD_SM2000D = np.array(SM2000D_lis)
-
-
-
-
 
 #------------------------------ grism pair design ------------------------------
 import sympy as sym
@@ -261,9 +261,6 @@ class Grism():
     
 data = Grism(560, -34)
 
-
-
-
 #------------------------------ setup ------------------------------
 import pandas as pd
 df = pd.read_excel('excel file name', 'sheet name')
@@ -280,10 +277,7 @@ data_3 = [wavelength[i3], omega[i3], n_value[i3], N_value[i3]]
 data_4 = [wavelength[i4], omega[i4], n_value[i4], N_value[i4]]
 data_5 = [wavelength[i5], omega[i5], n_value[i5], N_value[i5]]
 
-
-
-
-#------------------------------ simulation ------------------------------
+#------------------------------ optomal value search ------------------------------
 # stretcher
 fiber_length = 25*10**-3
 start_wavelength = 1600
@@ -293,6 +287,7 @@ stretcher_data1 = SM2000D_GDD[1600-start_wavelength]
 stretcher_data2 = SM2000D_GDD[1789-start_wavelength]
 stretcher_data3 = SM2000D_GDD[1900-start_wavelength]
 
+# graph stretcher GDD vs wavelngth
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots(facecolor='w')
@@ -315,7 +310,22 @@ L_lis = conbinations[:, 0]
 H_lis = conbinations[:, 1]
 G_lis = conbinations[:, 2]
 
-# simulation
+data = Grism(560, -34)
+data1 = data.GDD(data_1[1], data_1[2], data_1[3], 41, L, H, G) + stretcher_data1
+data2 = data.GDD(data_2[1], data_2[2], data_2[3], 41, L, H, G) + stretcher_data2
+data3 = data.GDD(data_3[1], data_3[2], data_3[3], 41, L, H, G) + stretcher_data3
+
+args = (L,H,G)
+
+func1 = sym.lambdify(args, data1, "numpy")
+func2 = sym.lambdify(args, data2, "numpy")
+func3 = sym.lambdify(args, data3, "numpy")
+
+GDD_1 = func1(L_lis, H_lis, G_lis)
+GDD_2 = func2(L_lis, H_lis, G_lis)
+GDD_3 = func3(L_lis, H_lis, G_lis)
+
+# optomal value search
 min_GDD = 1
 for i in range(len(GDD_1)):
     if abs(GDD_2[i]) <= min_GDD and GDD_1[i] < 0 and GDD_3[i] < 0 and -GDD_1[i] <= 0.1 and -GDD_3[i] <= 0.1:
@@ -327,10 +337,6 @@ for i in range(len(GDD_1)):
         print('GDD@1950nm:', GDD_3[i])
         print('-'*30)
         
-        
- 
- 
- 
 #------------------------------ simulation result ------------------------------
 # GDD vs wavelength
 import pandas as pd
@@ -342,7 +348,7 @@ import math
 light_speed = 2.99792458*10**8   # m/s
 pi = math.pi
 
-df = pd.read_excel('excel file name', 'sheet name')
+df = pd.read_excel('excel file name', 'sheet name') # selection of file and sheet with prism optical properties
 omega_GDD = np.array(df['angular frequency,rad/s'])
 omega_a = omega_GDD*10**-12
 n_value = np.array(df['n'])
@@ -355,7 +361,7 @@ wave_length = 2*pi*light_speed/omega_a*10**-3
 
 data = Grism(560, -34)
 
-# [85, 16, 92]
+# substitution of optimal value
 grism_para = [99, 1, 86]
 
 args = (x,n,N)
@@ -372,7 +378,6 @@ ax.set_ylabel('GDD[s^2]')
 fig.subplots_adjust(bottom=0.15)
 plt.show()
 fig.savefig('save file name')
-
 
 # phase
 import numpy as np
@@ -500,7 +505,3 @@ plt.ylabel("I(t)")
 plt.xlim(-1.00E-12,1.00E-12)
 plt.show()
 fig.savefig('save file name')
-
-
-
-
